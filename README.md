@@ -2,8 +2,6 @@
 
 An under-construction pipeline for DECam CCD testing for the LS4 Survey.
 
-## Getting started
-
 ## Packages used
 
 Numpy, Scipy.stats, Astropy, SEP
