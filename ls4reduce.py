@@ -12,6 +12,8 @@ Want to add: get rid of destination args and make it all automatic and self-cont
 import os, glob
 import numpy as np
 from astropy.io import fits
+import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
 import sep
 
 
@@ -129,14 +131,18 @@ def extract(filename, threshold):
     """
     Extract sources using SEP
     
-    filename -- path to FITS file
+    filename -- path to FITS file OR numpy.Ndarray
     threshold -- pixel value to extract above
     
     Returns: object with different params
     
     """
+    if isinstance(filename, (np.ndarray)):
+        data = filename.astype(np.float64)
     
-    data = fits.getdata(filename).astype(np.float64)
+    else:  
+        data = fits.getdata(filename).astype(np.float64)
+    
     sources = sep.extract(data, threshold)
     
     
@@ -173,3 +179,118 @@ def makeRegions(x, y, destination):
     ds9reg.close()
     
     print('Written in', destination)
+
+# Executes SEP photometry routine with circles
+    
+def doPhotometry(data, extractobj, radius):
+    """ SEP's photometry feature using circles
+    
+    data -- ndarray object
+    extractobj -- output object from sep.extract
+    radius -- radius of circle to extract
+    """
+    
+    flux, fluxerr, flag = sep.sum_circle(data, extractobj['x'], extractobj['y'], radius)
+    
+    return flux, fluxerr, flag
+
+# Computes a list of fluxes from doPhotometry for a list of files at one exposure time
+
+def computeFlux(filelist, threshold, radius, makeRegionFile = True):
+    """Computes fluxes of a list of image files by source extraction and photometry
+       Uses doPhotometry()
+       
+       filelist -- a list of FITS images at a single exposure time
+       threshold -- float for extraction threshold
+       radius -- integer pixel radius of photometric circle for doPhotometry
+    """
+    
+    dat = []
+    
+    for im in filelist:
+        filelist_obj = extract(im, threshold)
+        
+        if makeRegionFile:
+            makeRegions(filelist_obj['x'], filelist_obj['y'], im.rsplit('/',1)[0]+'/'+im.rsplit('/',2)[2][:-5]+'.reg')
+        
+        data = fits.getdata(im).astype(np.float64)
+        flux, fluxerr, flag = doPhotometry(data, filelist_obj, radius)
+        
+        dat += [flux]
+    
+    return dat
+    
+# Double Gaussian profile
+
+def double_gaussian( x, c1, mu1, sigma1, c2, mu2, sigma2 ):
+    result =   c1 * np.exp( - (x - mu1)**2.0 / (2.0 * sigma1**2.0) ) \
+          + c2 * np.exp( - (x - mu2)**2.0 / (2.0 * sigma2**2.0) )
+    return result
+
+# Compute gain of x-ray exposed image
+
+def computeGain(fluxlist, nbins, fluxrange, plot=True):
+    """
+    fluxlist -- list of 1D arrays of extracted fluxes from computeFlux() at one exposure time
+    nbins -- integer number of bins
+    fluxrange -- tuple of range to restrict histogramming
+    """
+    
+    if plot:
+        
+        nout = []
+        binsout = []
+        peak1 = []
+        peak2 = []
+        for i in range(len(fluxlist)):
+            (n, bins, _) = plt.hist(fluxlist[i], bins=nbins, range=fluxrange, density=False, histtype='step')
+            bin_centers = bins[:-1] + np.diff(bins) / 2
+            
+            # For log plot, turn 0s into 1
+            n[n==0]=1
+            popt, _ = curve_fit(double_gaussian, bin_centers, np.log(n), p0=[1,80000.0,100.0,1,88000.0,100.0])
+            xfit = np.linspace(bins[0], bins[-1], 10000)
+            plt.plot(xfit, np.exp(double_gaussian(xfit, *popt)), label='i='+str(i))
+            peak1 += [popt[1]]
+            peak2 += [popt[4]]
+            
+            # Store hist data
+            nout += [n]
+            binsout += [bins]
+        plt.yscale('log')
+        plt.xlim(np.mean([peak1])*0.8, 100000)
+        plt.xlabel('Flux')
+        plt.ylabel('Counts')
+        plt.legend()
+        plt.show()
+        
+        peak1 = np.array(peak1)
+        peak2 = np.array(peak2)
+        
+        gain_from_peak1 = peak1 / ((1570.5 + 1573.48)/2)
+        gain_from_peak2 = peak2 / 1730.50
+        
+        mean_gain = np.mean(np.concatenate((gain_from_peak1,gain_from_peak2)))
+        
+        return mean_gain, gain_from_peak1, gain_from_peak2
+    
+    else:
+        
+        peak1 = []
+        peak2 = []
+        for i in range(len(fluxlist)):
+            (n, bins) = np.histogram(fluxlist[i], bins=nbins, range=fluxrange)
+            bin_centers = bins[:-1] + np.diff(bins) / 2
+            n[n==0]=1
+            popt, _ = curve_fit(double_gaussian, bin_centers, np.log(n), p0=[1,80000.0,100.0,1,88000.0,100.0])
+            peak1 += [popt[1]]
+            peak2 += [popt[4]]
+        peak1 = np.array(peak1)
+        peak2 = np.array(peak2)
+        
+        gain_from_peak1 = peak1 / ((1570.5 + 1573.48)/2)
+        gain_from_peak2 = peak2 / 1730.50
+        
+        mean_gain = np.mean(np.concatenate((gain_from_peak1,gain_from_peak2)))
+        
+        return mean_gain, gain_from_peak1, gain_from_peak2
