@@ -203,6 +203,9 @@ def computeFlux(filelist, threshold, radius, makeRegionFile = True):
        filelist -- a list of FITS images at a single exposure time
        threshold -- float for extraction threshold
        radius -- integer pixel radius of photometric circle for doPhotometry
+       
+       Output:
+       A list of 1D numpy arrays of length len(filelist). Each 1D numpy array contains extracted flux values for each FITS image in filelist.
     """
     
     dat = []
@@ -294,3 +297,78 @@ def computeGain(fluxlist, nbins, fluxrange, plot=True):
         mean_gain = np.mean(np.concatenate((gain_from_peak1,gain_from_peak2)))
         
         return mean_gain, gain_from_peak1, gain_from_peak2
+
+# Compute read noise
+    
+def computeRN(filelist, gain, plot=True):
+    """
+    gain -- float value of measured gain 
+    filelist -- list of raw images filenames (.fz)
+    """
+    
+    readNoise_2 = [] # for ext. 2
+    readNoise_3 = [] # for ext. 3
+    
+    for i in range(len(filelist)):
+        
+        im_dat_2 = fits.getdata(filelist[i], 2)
+        im_dat_3 = fits.getdata(filelist[i], 3)
+        
+        # Overscan region data
+        
+        im_dat_2_os = im_dat_2[:,1030:]
+        im_dat_3_os = im_dat_3[:,1030:]
+        
+        # Median subtract overscan region
+        
+        im_dat_2_os_medsub = np.zeros(np.shape(im_dat_2_os))
+        im_dat_3_os_medsub = np.zeros(np.shape(im_dat_3_os))
+        
+        for j in range(len(im_dat_2_os)):
+            im_dat_2_os_medsub[j] = im_dat_2_os[j] - np.median(im_dat_2_os, axis=1)[j]
+        for k in range(len(im_dat_2_os)):
+            im_dat_3_os_medsub[k] = im_dat_3_os[k] - np.median(im_dat_3_os, axis=1)[k]
+        
+        # Plots
+        
+        if plot:
+        
+            fig, (ax1,ax2) = plt.subplots(1,2,figsize=(15,5))
+            (n10s_2, bins10s_2, patches10s_2) = ax1.hist(im_dat_2_os_medsub.flatten(), bins=np.arange(min(im_dat_2_os_medsub.flatten()), max(im_dat_2_os_medsub.flatten()) + 1, 1), range=(-800,800), density=True)
+            im_dat_2_os_medsub_fitint = np.linspace(-800, 800, len(im_dat_2_os_medsub.flatten()[abs(im_dat_2_os_medsub.flatten()) < 800]))
+            mu_2, sigma_2 = stats.norm.fit(im_dat_2_os_medsub.flatten()[abs(im_dat_2_os_medsub.flatten()) < 800])
+            im_dat_2_os_medsub_fit = stats.norm.pdf(im_dat_2_os_medsub_fitint, mu_2, sigma_2)
+            ax1.plot(im_dat_2_os_medsub_fitint, im_dat_2_os_medsub_fit, label='Gaussian Fit')
+            ax1.set_xlim(-800,800)
+
+            (n10s_3, bins10s_3, patches10s_3) = ax2.hist(im_dat_3_os_medsub.flatten(), bins=np.arange(min(im_dat_3_os_medsub.flatten()), max(im_dat_3_os_medsub.flatten()) + 1, 1), range=(-800,800), density=True)
+            im_dat_3_os_medsub_fitint = np.linspace(-800, 800, len(im_dat_3_os_medsub.flatten()[abs(im_dat_3_os_medsub.flatten()) < 800]))
+            mu_3, sigma_3 = stats.norm.fit(im_dat_3_os_medsub.flatten()[abs(im_dat_3_os_medsub.flatten()) < 800])
+            im_dat_3_os_medsub_fit = stats.norm.pdf(im_dat_3_os_medsub_fitint, mu_3, sigma_3)
+            ax2.plot(im_dat_3_os_medsub_fitint, im_dat_3_os_medsub_fit, label='Gaussian Fit')
+            ax2.set_xlim(-800,800)
+        
+        
+            ax1.legend(loc='upper right', frameon=False)
+            ax2.legend(loc='upper right', frameon=False)
+            ax1.set_title((str(filelist[i]))+' Ext 2 '+'(histogram normalized)')
+            ax2.set_title((str(filelist[i]))+' Ext 3 '+'(histogram normalized)')
+            ax1.set_xlabel('pixel value'); ax1.set_ylabel('counts')
+            ax2.set_xlabel('pixel value'); ax2.set_ylabel('counts')
+            plt.show()
+            
+            readNoise_2 += [sigma_2/gain]
+            readNoise_3 += [sigma_3/gain]
+            
+        else:
+            
+            hist_2, bins_2 = np.histogram(im_dat_2_os_medsub.flatten(), bins=np.arange(min(im_dat_2_os_medsub.flatten()), max(im_dat_2_os_medsub.flatten()) + 1, 1), range=(-800,800))
+            mu_2, sigma_2 = stats.norm.fit(im_dat_2_os_medsub.flatten()[abs(im_dat_2_os_medsub.flatten()) < 800])
+            
+            hist_3, bins_3 = np.histogram(im_dat_3_os_medsub.flatten(), bins=np.arange(min(im_dat_3_os_medsub.flatten()), max(im_dat_3_os_medsub.flatten()) + 1, 1), range=(-800,800))
+            mu_3, sigma_3 = stats.norm.fit(im_dat_3_os_medsub.flatten()[abs(im_dat_3_os_medsub.flatten()) < 800])
+            
+            readNoise_2 += [sigma_2/gain]
+            readNoise_3 += [sigma_3/gain]
+            
+    return readNoise_2, readNoise_3
