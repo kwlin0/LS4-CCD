@@ -14,6 +14,7 @@ import numpy as np
 from astropy.io import fits
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
+from scipy import stats
 import sep
 
 
@@ -26,7 +27,7 @@ def overscanSubtraction(filename, extension, destination):
     Keyword arguments:
     filename -- the path and file of image
     extension -- FITS image extension
-    destination -- directory of output image (current working directory/destination.fits)
+    destination -- directory of output image (current working directory/destination directory)
     """
     im_dir = filename
     im_header = fits.getheader(im_dir, ext=extension)
@@ -86,11 +87,12 @@ def makeSuperbias(filelist, outputfile):
 # Bias subtraction routine
 
 
-def biasSubtraction(filelist, superbias):
+def biasSubtraction(filelist, superbias, destination):
     """ Subtracts super bias from filelist images
     
     filelist -- list of images to be super bias subtracted
     superbias -- super bias FITS file (note extension)
+    destination -- directory of output image (current working directory/destination directory)
     """    
     # Super bias data
     sb_data = fits.getdata(superbias)
@@ -99,8 +101,8 @@ def biasSubtraction(filelist, superbias):
         im_data = fits.getdata(im)
         bias_sub = im_data - sb_data 
         
-        fits.writeto(os.getcwd()+'/bs_'+im.rsplit('/',1)[1], bias_sub, fits.getheader(im), overwrite=True)
-        print('Written in:', os.getcwd()+'/bs_'+im.rsplit('/',1)[1])
+        fits.writeto(os.getcwd()+ '/'+ destination + '/bs_'+im.rsplit('/',1)[1], bias_sub, fits.getheader(im), overwrite=True)
+        print('Written in:', os.getcwd()+'/'+ destination + '/bs_'+im.rsplit('/',1)[1])
 
 
 # Merge 2 amps together by flipping x-axis
