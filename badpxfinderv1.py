@@ -4,7 +4,7 @@
 """
 Identifying and creating a mask for bad columns and pixels.
 
-Version 1.0
+Version 1.2
 
 Kenneth Lin, 01/22
 
@@ -231,33 +231,44 @@ def findClipidx(varim, mu, sigma, signum=5.):
     
     return pxclipidx, pxclipval
 
-def makeMask(varim, pxclipval, write=True):
+def findPx(varim, pxclipval):
     """ Returns (x,y) of identified bad/hot pixels
+    """
+    y = np.where(varim > pxclipval)[0]
+    x = np.where(varim > pxclipval)[1]
+
+    return x, y
+
+def makeMask(varim, x, y, display=False):
+    """ Returns mask image array
     
     Arguments
     -----------
-    varim: variance image array (2D numpy array)
-    
-    Returns
-    -----------
+    varim: 2D numpy array
+        (nominally the variance image array)
     x, y: array_like
         pixel positions
         can be used as inputs to makeRegions for ds9 .reg generation
-        
+    display: boolean, optional
+        imshow mask, default=False
+    
+    Returns
+    -----------
+    mask: 2D numpy array
+    
     """
     
     imsize_y, imsize_x = varim.shape
     
     mask = np.zeros((imsize_y, imsize_x))
     
-    y = np.where(varim > pxclipval)[0]
-    x = np.where(varim > pxclipval)[1]
-    
     mask[y,x] = 1.
     
-    if write == True:
-        outputname = 'mask.fits'
-        fits.writeto(outputname, mask, overwrite=True)
-        print('Written in ', outputname)
+    outputname = 'mask.fits'
+    fits.writeto(outputname, mask, overwrite=True)
+    print('Written in ', outputname)
     
-    return x, y
+    if display:
+        displayImage(mask)
+    
+    return mask
