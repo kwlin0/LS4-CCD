@@ -10,12 +10,75 @@ Want to add: get rid of destination args and make it all automatic and self-cont
 """
 
 import os, glob
+from os.path import basename
 import numpy as np
 from astropy.io import fits
+from astropy.stats import sigma_clip
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from scipy import stats
+from SkipperImage import *
 import sep
+from tqdm.notebook import tqdm
+
+
+def find_data(directory, filt):
+    
+    """ Get a list of a list of files of a specified filter.
+    
+    directory : either 'qe', 'ptc', or 'darks'
+    file : int
+    """
+    directory = glob.glob(directory + '/*/')
+    
+    output_dir_list = []
+    
+    for folder in directory:
+        filelist = glob.glob(folder + '*.fz') #+ glob(folder + '*.fits') 
+        
+        if 'dark' in filelist[0]:             # identifies any darks which do not have "FILTER" keys in the header
+            output_dir_list.append(filelist)
+        else:
+            filelist_filt = fits.getheader(filelist[0])['FILTER']
+            
+            if filelist_filt == filt:
+                output_dir_list.append(filelist)
+
+    if len(output_dir_list) > 0:
+        print(str(len(output_dir_list)) +' directories found')
+            
+    else:
+        return 'Filter ' + str(filt) +' not found'
+        
+    
+    return output_dir_list
+
+
+def fz_to_fits(filelist, ccd, verbose=False):
+    """ Makes ext 2 and 3 files from a list of fpacked files.
+        Possible improvement: unpack and resave for any extension with data as it is currently hard-coded for ext-2 and 3.
+    
+    verbosity : prints directory of where file is being written to (default : False)
+    
+    """
+    filelist1=np.sort(glob.glob(f'/global/cfs/cdirs/m937/ccds/{ccd}/' + filelist[0].rsplit('/', 1)[0] + '/*.fz'))
+    
+    for f in tqdm(filelist1):
+        data_e2 = fits.getdata(f, ext=2)
+        data_e3 = fits.getdata(f, ext=3)
+        
+        fits.writeto(f'/global/cfs/cdirs/m937/ccds/{ccd}/' + filelist[0].rsplit('/', 1)[0] + '/'+f.rsplit('/',1)[1][:-3] + '_e2.fits', data_e2, fits.getheader(f), overwrite=True)
+        if verbose == True:
+            print('Written to ' + f'{ccd}/' + filelist[0].rsplit('/', 1)[0] + '/' + f.rsplit('/',1)[1][:-3] + '_e2.fits')
+        
+        fits.writeto(f'/global/cfs/cdirs/m937/ccds/{ccd}/' + filelist[0].rsplit('/', 1)[0] + '/'+f.rsplit('/',1)[1][:-3] + '_e3.fits', data_e3, fits.getheader(f), overwrite=True)
+        if verbose == True:
+            print('Written to ' + f'{ccd}/' + filelist[0].rsplit('/', 1)[0] + '/' + f.rsplit('/',1)[1][:-3] + '_e3.fits')
+    
+    filelist_e2 = np.sort(glob.glob(f'/global/cfs/cdirs/m937/ccds/{ccd}/' + filelist[0].rsplit('/', 1)[0] + '/*e2.fits'))
+    filelist_e3 = np.sort(glob.glob(f'/global/cfs/cdirs/m937/ccds/{ccd}/' + filelist[0].rsplit('/', 1)[0] + '/*e3.fits'))
+    
+    return filelist_e2, filelist_e3
 
 
 # Overscan subtraction routine
@@ -24,10 +87,22 @@ import sep
 def overscanSubtraction(filename, extension, destination):
     """ Overscan subtraction routine
     
-    Keyword arguments:
-    filename -- the path and file of image
-    extension -- FITS image extension
-    destination -- directory of output image (current working directory/destination directory)
+    Arguments
+    ----------
+    filename : string
+        Path and file of image (.fz)
+    extension : int
+        FITS image extension
+    destination : string
+        directory of output image (current working directory/destination directory)
+    
+    Returns
+    -------
+    None
+    
+    Recent changes: 
+     - Output filename "overscan" -> "ovscan" (1/11/22)
+     
     """
     im_dir = filename
     im_header = fits.getheader(im_dir, ext=extension)
@@ -50,9 +125,55 @@ def overscanSubtraction(filename, extension, destination):
     # Crop side overscan region
     im_overscan_sub = im_topOverscan_sub[:,:x_overscan]
     
-    fits.writeto(os.getcwd()+ '/'+ destination + '/' + filename.rsplit('/',1)[1][:-3] + '_overscan_' + str(extension) +'.fits', im_overscan_sub, im_header, overwrite=True)
-    print('Written in', os.getcwd()+ '/'+ destination + '/' + filename.rsplit('/',1)[1][:-3] + '_overscan_'+ str(extension) +'.fits')
+    fits.writeto(os.getcwd()+ '/'+ destination + '/' + filename.rsplit('/',1)[1][:-3] + '_ovscan_' + str(extension) +'.fits', im_overscan_sub, im_header, overwrite=True)
+    print('Written in', os.getcwd()+ '/'+ destination + '/' + filename.rsplit('/',1)[1][:-3] + '_ovscan_'+ str(extension) +'.fits')
     
+    return None
+
+def ovscanSub(filelist, destination, ext=(2,3)):
+    """
+    Overscan subtracts a list of fpacked image files.
+    
+    Arguments
+    ----------
+    filelist : list
+        list of image (.fz) files
+    destination : string
+        see overscanSubtraction function
+    ext : int or tuple
+        maximum length = 4, default = (2,3)
+    
+    Returns
+    -------
+    None
+    
+    """
+    # First check for correct type of ext
+    if isinstance(ext, (int,tuple)):
+        # If ext is tuple
+        
+        if isinstance(ext, tuple):
+            if len(ext) == 2:
+                for i in range(len(filelist)):
+                    overscanSubtraction(filelist[i], ext[0], destination)
+                    overscanSubtraction(filelist[i], ext[1], destination)
+            elif len(ext) == 3:
+                for i in range(len(filelist)):
+                    overscanSubtraction(filelist[i], ext[0], destination)
+                    overscanSubtraction(filelist[i], ext[1], destination)
+                    overscanSubtraction(filelist[i], ext[2], destination)
+            else:
+                print('Too many ext values')
+        
+        # Else (if ext is int)
+        else:
+            for i in range(len(filelist)):
+                overscanSubtraction(filelist[i], ext, destination)
+    
+    # Otherwise if ext dtype is incorrect
+    else:
+        print('Invalid ext value')
+        
     return None
 
 
@@ -62,8 +183,10 @@ def overscanSubtraction(filename, extension, destination):
 def makeSuperbias(filelist, outputfile):
     """ Generate superbias routine
     
-    filelist -- list of FITS files
-    outputfile -- name of FITS file to be output, including destination directory
+    Arguments
+    ----------
+    filelist : list of FITS files
+    outputfile : name of FITS file to be output, including destination directory
     """
     
     n = len(filelist)
@@ -82,7 +205,45 @@ def makeSuperbias(filelist, outputfile):
 
     fits.writeto(os.getcwd()+'/'+outputfile, med, fits.getheader(filelist[0]), overwrite=True)
     print('Written in', os.getcwd()+'/'+outputfile)
+    
+# Make median routine
+# KL: this is exactly the same as makeSuperbias. The function name is more general (less misleading for the future...)
 
+def makeMedian(filelist, destination):
+    """ Returns a median image of any list of FITS image files
+    
+    Arguments:
+    filelist : list of FITS file names
+    destination : destination directory of output (must include .fits ending) or simply filename
+    
+    """
+    n = len(filelist)
+    
+    frame0 = fits.getdata(filelist[0])
+    imsize_y, imsize_x = frame0.shape
+    fits_stack = np.zeros((imsize_y, imsize_x , n))
+    
+    for ii in range(0, n):
+        im = fits.getdata(filelist[ii])
+        fits_stack[:,:,ii] = im
+    
+    med = np.median(fits_stack, axis=2)
+    fits.writeto(os.getcwd()+'/'+destination, med, fits.getheader(filelist[0]), overwrite=True)
+    print('Median image written.')
+    
+    return med
+
+def makeMedian_fz(filelist, destination_directory, ccd):
+    """ Returns 2 median images for each of the two FITS extensions
+    """
+    
+    print('Unpacking files:')
+    filelist_e2, filelist_e3 = fz_to_fits(filelist, ccd)
+    
+    median_e2 = makeMedian(filelist_e2, destination_directory + '_median_e2.fits')
+    median_e3 = makeMedian(filelist_e3, destination_directory + '_median_e3.fits')
+    
+    return median_e2, median_e3
 
 # Bias subtraction routine
 
@@ -109,7 +270,7 @@ def biasSubtraction(filelist, superbias, destination):
 
 
 def mergeAmps(im_ex2, im_ex3):
-    """ Combines two halves of CCD together from extensions 2 and 3
+    """ Combines two halves of CCD together from extensions 2 and 3, by flipping the x-axis of extension 3. 
     
     im_ex2 -- list of image files with extension 2
     im_ex3 -- list of image files with extension 3, corresponding images must be in same sequential order as im_ex2
@@ -177,7 +338,7 @@ def makeRegions(x, y, destination):
     ds9reg.write('global color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1 highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1 \n')
     ds9reg.write('IMAGE \n')
     for ix, iy in zip(xcoord_reg, ycoord_reg):
-        ds9reg.write('circle '+ix+' '+iy+' 5 \n')
+        ds9reg.write('circle '+ix+' '+iy+' 4 \n')
     ds9reg.close()
     
     print('Written in', destination)
@@ -343,24 +504,24 @@ def computeRN(filelist, gain, plot=True):
             ax1.plot(im_dat_2_os_medsub_fitint, im_dat_2_os_medsub_fit, label='Gaussian Fit')
             ax1.set_xlim(-800,800)
 
-            (n10s_3, bins10s_3, patches10s_3) = ax2.hist(im_dat_3_os_medsub.flatten(), bins=np.arange(min(im_dat_3_os_medsub.flatten()), max(im_dat_3_os_medsub.flatten()) + 1, 1), range=(-800,800), density=True)
-            im_dat_3_os_medsub_fitint = np.linspace(-800, 800, len(im_dat_3_os_medsub.flatten()[abs(im_dat_3_os_medsub.flatten()) < 800]))
-            mu_3, sigma_3 = stats.norm.fit(im_dat_3_os_medsub.flatten()[abs(im_dat_3_os_medsub.flatten()) < 800])
-            im_dat_3_os_medsub_fit = stats.norm.pdf(im_dat_3_os_medsub_fitint, mu_3, sigma_3)
-            ax2.plot(im_dat_3_os_medsub_fitint, im_dat_3_os_medsub_fit, label='Gaussian Fit')
-            ax2.set_xlim(-800,800)
+            #(n10s_3, bins10s_3, patches10s_3) = ax2.hist(im_dat_3_os_medsub.flatten(), bins=np.arange(min(im_dat_3_os_medsub.flatten()), max(im_dat_3_os_medsub.flatten()) + 1, 1), range=(-800,800), density=True)
+            #im_dat_3_os_medsub_fitint = np.linspace(-800, 800, len(im_dat_3_os_medsub.flatten()[abs(im_dat_3_os_medsub.flatten()) < 800]))
+            #mu_3, sigma_3 = stats.norm.fit(im_dat_3_os_medsub.flatten()[abs(im_dat_3_os_medsub.flatten()) < 800])
+            #im_dat_3_os_medsub_fit = stats.norm.pdf(im_dat_3_os_medsub_fitint, mu_3, sigma_3)
+            #ax2.plot(im_dat_3_os_medsub_fitint, im_dat_3_os_medsub_fit, label='Gaussian Fit')
+            #ax2.set_xlim(-800,800)
         
         
             ax1.legend(loc='upper right', frameon=False)
             ax2.legend(loc='upper right', frameon=False)
-            ax1.set_title((str(filelist[i]))+' Ext 2 '+'(histogram normalized)')
-            ax2.set_title((str(filelist[i]))+' Ext 3 '+'(histogram normalized)')
+            #ax1.set_title((str(filelist[i]))+' Ext 2 '+'(histogram normalized)')
+            #ax2.set_title((str(filelist[i]))+' Ext 3 '+'(histogram normalized)')
             ax1.set_xlabel('pixel value'); ax1.set_ylabel('counts')
             ax2.set_xlabel('pixel value'); ax2.set_ylabel('counts')
             plt.show()
             
             readNoise_2 += [sigma_2/gain]
-            readNoise_3 += [sigma_3/gain]
+            #readNoise_3 += [sigma_3/gain]
             
         else:
             
@@ -373,4 +534,116 @@ def computeRN(filelist, gain, plot=True):
             readNoise_2 += [sigma_2/gain]
             readNoise_3 += [sigma_3/gain]
             
-    return readNoise_2, readNoise_3
+    return readNoise_2 #, readNoise_3
+
+def fitOverscan(filename, extension, plot=False):
+    """ Fit overscan region pixels to Gaussian by binning pixel values and fitting to a Gaussian.
+    
+    filename : fpacked (.fz) file
+    extension : int
+    
+    Returns:
+    
+    sigma : standard deviation of fit. Read noise is then sigma / gain.
+    """
+    
+    im_dat = fits.getdata(filename, ext=extension)
+    
+    im_dat_os = im_dat[:,1030:]
+    
+    print('Extracted overscan region.')
+    
+    # Allocate array for median subtracted overscan region
+    im_dat_os_medsub = np.zeros(np.shape(im_dat_os))
+    
+    print('Median subtracting overscan region.')
+    for j in tqdm(range(len(im_dat_os))):
+        im_dat_os_medsub[j] = im_dat_os[j] - np.median(im_dat_os, axis=1)[j]
+    
+    if plot:
+        print('Binning data.')
+        fig, ax = plt.subplots(1, 1, figsize=(10, 7))
+        (n, bins, patches) = ax.hist(im_dat_os_medsub.flatten(), bins=np.arange(min(im_dat_os_medsub.flatten()), 
+                                                                                max(im_dat_os_medsub.flatten()) + 1, 1), range=(-800,800), density=True, histtype='step')
+        im_dat_os_medsub_fitint = np.linspace(-800, 800, len(im_dat_os_medsub.flatten()[abs(im_dat_os_medsub.flatten()) < 800]))
+        mu, sigma = stats.norm.fit(im_dat_os_medsub.flatten()[abs(im_dat_os_medsub.flatten()) < 800])
+        im_dat_os_medsub_fit = stats.norm.pdf(im_dat_os_medsub_fitint, mu, sigma)
+        ax.plot(im_dat_os_medsub_fitint, im_dat_os_medsub_fit, ls='--', lw=4, label='Gaussian Fit')
+        ax.set_xlim(-800,800)
+        ax.legend(loc='upper right', frameon=False, fontsize=20)
+        ax.set_xlabel('Overscan pixel value', size=20); ax.set_ylabel('Counts', size=20)
+        ax.tick_params(direction='in', axis='both', which='major', labelsize=20)
+        ax.grid()
+        plt.show()
+    else:
+        print('Binning data.')
+        hist, bins = np.histogram(im_dat_os_medsub.flatten(), bins=np.arange(min(im_dat_os_medsub.flatten()), max(im_dat_os_medsub.flatten()) + 1, 1), range=(-800,800))
+        mu, sigma = stats.norm.fit(im_dat_os_medsub.flatten()[abs(im_dat_os_medsub.flatten()) < 800])
+    
+    return sigma
+
+
+# Code from Edgar/Alex team
+# Creates a dictionary with path to each image where trial 
+def FileDict(files):
+    fileArray=dict()
+    for f in files:
+        time=float(basename(f).split('_')[2][1:])
+        trial=int(basename(f).split('_')[4][1])
+        if(not (time in fileArray.keys())):
+            fileArray[time]=dict()
+        fileArray[time][trial]=f
+    return fileArray
+
+# gets the exposure times 
+def getTimes(f):
+    timesAsc=sort(list(FileDict(f).keys()))
+    return timesAsc
+
+def ptcData(skipSamples,f):
+    signalMean=list()
+    signalSD=list()
+    signalDiffSD=list()
+    readNoise=list()
+    for samp in [skipSamples]:
+        stds=np.zeros_like(getTimes(f))
+        noiseStds=np.zeros_like(getTimes(f))
+        stdsCorr=np.zeros_like(getTimes(f))
+        amps=np.zeros_like(getTimes(f))
+        for i in range(0,len(getTimes(f))):
+            print(getTimes(f)[i])
+            try:
+                timeFiles=FileDict(f)[getTimes(f)[i]]
+                trial1=SkipperImage(timeFiles[0],skipSamples=skipSamples)
+                trial2=SkipperImage(timeFiles[1],skipSamples=skipSamples)
+                
+                os1=trial1.getOverscan()
+                img1=sigma_clip(trial1.getImage())
+                img2=sigma_clip(trial2.getImage())
+                
+                r1=img1.shape[0]
+                r2=img2.shape[0]
+                if(r1 > r2):
+                    img1=img1[:r2,:]
+                elif(r2 > r1):
+                    img2=img2[:r1,:]
+                
+                amps[i]=(np.ma.mean(img1)+np.ma.mean(img2))/2.0
+                signalMean.append(amps[i])
+                
+                img1=img1-np.ma.median(img1)
+                img2=img2-np.ma.median(img2)
+                
+                stds[i]=np.ma.std(img1.flatten())
+                noiseStds[i]=np.ma.std(sigma_clip(os1.flatten(),maxiters=None))
+                readNoise.append(noiseStds[i])
+                signalSD.append(stds[i])
+                imgDiff=(img1-img2)
+                stdsCorr[i]=np.ma.std(imgDiff.flatten())/sqrt(2)
+                signalDiffSD.append(stdsCorr[i])
+            except Exception as ex:
+                print(ex)
+                print('Skipping '+str(timesAsc[i]))
+                stdsCorr[i]=-1.0
+                signalDiffSD.append(stdsCorr[i])
+        return np.array(signalMean),np.array(signalSD),np.array(signalDiffSD),np.array(readNoise)
