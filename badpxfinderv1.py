@@ -200,9 +200,8 @@ def displayImage(image):
     return None
 
 def findClip(mu, sigma, signum):
-    """
-    Given Gaussian fit mean and sigma, compute pixel value at which to clip above.
-    """
+    """ Given Gaussian fit mean and sigma, compute pixel value at which to clip above."""
+    
     sigma = abs(sigma)
     
     sigmac = signum * sigma
@@ -212,8 +211,7 @@ def findClip(mu, sigma, signum):
     return pxclipval
 
 def findClipidx(varim, mu, sigma, signum=5.):
-    """
-    Find indices of pixels with higher value than signum * sigma, where signum is by default 5.
+    """ Find indices of pixels with higher value than signum * sigma, where signum is by default 5.
     
     Arguments
     -----------
@@ -233,7 +231,20 @@ def findClipidx(varim, mu, sigma, signum=5.):
     
     return pxclipidx, pxclipval
 
-def makeMask(varim, pxclipval):
+def makeMask(varim, pxclipval, write=True):
+    """ Returns (x,y) of identified bad/hot pixels
+    
+    Arguments
+    -----------
+    varim: variance image array (2D numpy array)
+    
+    Returns
+    -----------
+    x, y: array_like
+        pixel positions
+        can be used as inputs to makeRegions for ds9 .reg generation
+        
+    """
     
     imsize_y, imsize_x = varim.shape
     
@@ -244,8 +255,9 @@ def makeMask(varim, pxclipval):
     
     mask[y,x] = 1.
     
-    outputname = 'mask.fits'
-    fits.writeto(outputname, mask, overwrite=True)
-    print('Written in ', outputname)
+    if write == True:
+        outputname = 'mask.fits'
+        fits.writeto(outputname, mask, overwrite=True)
+        print('Written in ', outputname)
     
     return x, y
