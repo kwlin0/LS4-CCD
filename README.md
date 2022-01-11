@@ -2,7 +2,7 @@
 
 An under-construction pipeline for DECam CCD testing for the LS4 Survey.
 
-## Packages used
+## Dependencies
 
 Numpy, Scipy.stats, Astropy, SEP
 
@@ -20,4 +20,4 @@ Using the x-ray approach involves manually placing a radioactive 55Fe source dir
 
 ## Measuring quantum efficiency
 
-Images taken at a range of wavelengths (at fixed exposure time) can be used to generate a relative QE curve.
+Images taken at a range of wavelengths (at fixed exposure time) can be used to generate a relative QE curve once dark-subtracted.
