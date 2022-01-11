@@ -1,4 +1,4 @@
-# LS4-CCD
+# LS4 CCD Testing Analysis Tools
 
 An under-construction pipeline for DECam CCD testing for the LS4 Survey.
 
