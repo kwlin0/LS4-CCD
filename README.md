@@ -19,3 +19,5 @@ A pair of flats at increasing exposure times can be used to produce a signal var
 Using the x-ray approach involves manually placing a radioactive 55Fe source directly in front of the CCD. The idea is to extract the sources of the x-ray hits on the active surface and plot the flux distribution of these hits. The energies of the electron capture decays are well-known. The ratio of the peaks at 5.9 keV and 6.5 keV are used to find the gain.
 
 ## Measuring quantum efficiency
+
+Images taken at a range of wavelengths (at fixed exposure time) can be used to generate a relative QE curve.
