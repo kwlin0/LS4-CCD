@@ -300,16 +300,20 @@ def fitPx(varim, binnum=300, hrange=(0,50000), xlim=(-1000,30000)):
     """
     
     varim = varim.flatten()
-    fitX = np.linspace(-2000, 10000, 800)
+    fitX = np.linspace(-2000, 10000, 800) # array range for curve fit
     
     plt.figure(figsize=(15,5))
+    
+    # Plot variance image distribution
     
     (n, bins, _) = plt.hist(varim, bins=binnum, range=hrange, histtype='stepfilled', 
                             density=False, facecolor='g', alpha=0.7, label='Variance Image')
     
     bin_centers = bins[:-1] + np.diff(bins) / 2
     
-    mu_guess       = bins[np.argmax(n)]
+    # The main event
+    
+    mu_guess       = bins[np.argmax(n)] # Uses peak of histogram as initial guess (should be robust)
     sigma_guess    = 100
     constant_guess = 1
     
@@ -321,7 +325,7 @@ def fitPx(varim, binnum=300, hrange=(0,50000), xlim=(-1000,30000)):
     plt.plot(fitX, gaussian(fitX, *popt), label='Gaussian Fit')
     plt.axvline(mu_fit, ls=':', c='k', label='$x_0$ = '+str('%s' % float('%.2f' % mu_fit)))
     
-    pxclip, pxclipval = findClipPx(varim, mu_fit, sigma_fit)
+    pxclip, pxclipval = findClipPx(varim, mu_fit, sigma_fit) # Finds pixel value at which to cutoff and its index
     
     plt.hist(varim[pxclip], bins=binnum, range=hrange, histtype='step', 
              edgecolor='r', hatch='//', label='Masked Px')
