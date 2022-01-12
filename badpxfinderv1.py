@@ -40,12 +40,12 @@ def file_prop(filelist):
     
     Returns
     -----------
-    n: length of a list of 2D arrays
+    nlist: length of a list of 2D arrays
     imsize_y, imsize_x: shape (y dim, x dim) of first element in the list
     
     """
     
-    n = len(filelist)
+    nlist = len(filelist)
     
     try:
         frame0 = fits.getdata(filelist[0])
@@ -54,7 +54,7 @@ def file_prop(filelist):
     
     imsize_y, imsize_x = frame0.shape
     
-    return n, imsize_y, imsize_x
+    return nlist, imsize_y, imsize_x
 
 def stackImages(filelist):
     """
@@ -71,11 +71,11 @@ def stackImages(filelist):
     
     """
     
-    n, imsize_y, imsize_x = file_prop(filelist)
+    nlist, imsize_y, imsize_x = file_prop(filelist)
     
-    fits_stack = np.zeros((imsize_y, imsize_x , n))
+    fits_stack = np.zeros((imsize_y, imsize_x , nlist))
     
-    for ii in range(0, n):
+    for ii in range(0, nlist):
         im = fits.getdata(filelist[ii])
         fits_stack[:,:,ii] = im
     
@@ -96,14 +96,14 @@ def medianImage(fits_stack_array):
     """
     return np.median(fits_stack_array, axis=2)
 
-def sigImage(filelist, n, imsize_y, imsize_x):
+def sigImage(filelist, nlist, imsize_y, imsize_x):
     """
     Create sigma image.
     
     Arguments
     -----------
     filelist: list of FITS files
-    n: number of elements in filelist (int)
+    nlist: number of elements in filelist (int)
     imsize_y: y-dimension of image 2D array (int)
     imsize_x: x-dimension of image 2D array (int)
     
@@ -119,9 +119,9 @@ def sigImage(filelist, n, imsize_y, imsize_x):
     med = medianImage(stackedImages)
     
     print('Creating sig image...')
-    sig = np.zeros((imsize_y, imsize_x , n))
+    sig = np.zeros((imsize_y, imsize_x , nlist))
     
-    for ii in range(0, n):
+    for ii in range(0, nlist):
         im = fits.getdata(filelist[ii])
         sig[:,:,ii] = im - med
     
@@ -141,14 +141,14 @@ def varianceImage(filelist, write=False):
     
     """
     
-    n, imsize_y, imsize_x = file_prop(filelist)
+    nlist, imsize_y, imsize_x = file_prop(filelist)
     
-    ms = int(n * 0.1585)
+    ms = int(nlist * 0.1585)
     
     varim = np.zeros((imsize_y, imsize_x))
     wdtim = np.zeros((imsize_y, imsize_x))
     
-    sig = sigImage(filelist, n, imsize_y, imsize_x)
+    sig = sigImage(filelist, nlist, imsize_y, imsize_x)
     
     print('Creating variance image...')
     for j in range(imsize_y):
@@ -156,8 +156,8 @@ def varianceImage(filelist, write=False):
 
             sig_sort = np.sort(sig[j,i,:])
             
-            var1 = abs(sig_sort[int(n/2)] - sig_sort[ms])
-            var2 = abs(sig_sort[int(n/2)] - sig_sort[n-ms])
+            var1 = abs(sig_sort[int(nlist/2)] - sig_sort[ms])
+            var2 = abs(sig_sort[int(nlist/2)] - sig_sort[nlist-ms])
             
             var = max(var1,var2)
             # wdt = abs(var1-var2)
@@ -210,7 +210,7 @@ def findClip(mu, sigma, signum):
     
     return pxclipval
 
-def findClipidx(varim, mu, sigma, signum=5.):
+def findClipPx(varim, mu, sigma, signum=5.):
     """ Find indices of pixels with higher value than signum * sigma, where signum is by default 5.
     
     Arguments
@@ -232,8 +232,8 @@ def findClipidx(varim, mu, sigma, signum=5.):
     return pxclipidx, pxclipval
 
 def findPx(varim, pxclipval):
-    """ Returns (x,y) of identified bad/hot pixels
-    """
+    """ Returns (x,y) of identified bad/hot pixels"""
+    
     y = np.where(varim > pxclipval)[0]
     x = np.where(varim > pxclipval)[1]
 
@@ -272,3 +272,71 @@ def makeMask(varim, x, y, display=False):
         displayImage(mask)
     
     return mask
+
+# Pixel distribution fitting
+
+def fitPx(varim, binnum=300, hrange=(0,50000), xlim=(-1000,30000)):
+    """ Fits a Gaussian over normally-distributed pixels and uses findClipPx to identify unwanted pixels.
+    
+    Arguments
+    -----------
+    varim: 2D numpy array
+    binnum: float
+        Number of histogram bins
+    hrange: tuple
+        range parameter of histogram
+    xlim: tuple
+        plot x-axis limits
+    
+    Returns
+    -----------
+    pxclipval: float
+        Pixel value cutoff
+    mu_fit: float
+        Gaussian fitting mu
+    sigma_fit: float
+        Gaussian fitting sigma
+    
+    """
+    
+    varim = varim.flatten()
+    fitX = np.linspace(-2000, 10000, 800)
+    
+    plt.figure(figsize=(15,5))
+    
+    (n, bins, _) = plt.hist(varim, bins=binnum, range=hrange, histtype='stepfilled', 
+                            density=False, facecolor='g', alpha=0.7, label='Variance Image')
+    
+    bin_centers = bins[:-1] + np.diff(bins) / 2
+    
+    mu_guess       = bins[np.argmax(n)]
+    sigma_guess    = 100
+    constant_guess = 1
+    
+    popt, _ = curve_fit(gaussian, bin_centers, n, p0=[constant_guess, mu_guess, sigma_guess])
+    
+    mu_fit    = popt[1]
+    sigma_fit = abs(popt[2])
+    
+    plt.plot(fitX, gaussian(fitX, *popt), label='Gaussian Fit')
+    plt.axvline(mu_fit, ls=':', c='k', label='$x_0$ = '+str('%s' % float('%.2f' % mu_fit)))
+    
+    pxclip, pxclipval = findClipPx(varim, mu_fit, sigma_fit)
+    
+    plt.hist(varim[pxclip], bins=binnum, range=hrange, histtype='step', 
+             edgecolor='r', hatch='//', label='Masked Px')
+    
+    #plt.hist(varim, bins=binnum, range=(0,50000), histtype='stepfilled', 
+    #                     density=False, facecolor='k', alpha=0.1, label='Variance: Tail')
+    plt.yscale('log')
+    plt.xlabel('Pixel value', size=15)
+    plt.ylabel('N', size=15)
+    plt.legend(frameon=False, prop={'size': 15})
+    plt.tight_layout()
+    plt.xlim(xlim)
+    plt.ylim(1e0,np.max(n)*5)
+    plt.tick_params(direction='in', axis='both', which='both', labelsize=15)
+    plt.grid()
+    plt.show()
+    
+    return pxclipval, mu_fit, sigma_fit
