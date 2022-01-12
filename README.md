@@ -4,7 +4,10 @@ An under-construction pipeline for DECam CCD testing for the LS4 Survey.
 
 ## Dependencies
 
-Numpy, Scipy.stats, Astropy, SEP
+* NumPy (1.20.0)
+* SciPy.stats (1.6.2)
+* Astropy (4.2.1)
+* SEP (1.2.0)
 
 ## Measuring gain
 
