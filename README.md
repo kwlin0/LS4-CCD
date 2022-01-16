@@ -8,6 +8,7 @@ An under-construction pipeline for DECam CCD testing for the LS4 Survey.
 * SciPy.stats (1.6.2)
 * Astropy (4.2.1)
 * SEP (1.2.0)
+* Optional: pylatex (1.4.1)
 
 ## Measuring gain
 
