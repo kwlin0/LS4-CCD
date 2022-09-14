@@ -25,3 +25,7 @@ Using the x-ray approach involves manually placing a radioactive 55Fe source dir
 ## Measuring quantum efficiency
 
 Images taken at a range of wavelengths (at fixed exposure time) can be used to generate a relative QE curve once dark-subtracted.
+
+## Bad columns and pixels
+
+Biases are used for identifying defects on the active surface. A large number of biases to work with is preferable.
