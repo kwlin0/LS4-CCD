@@ -210,7 +210,7 @@ def findClip(mu, sigma, signum):
     
     return pxclipval
 
-def findClipPx(varim, mu, sigma, signum=5.):
+def findClipPx(varim, mu, sigma, signum):
     """ Find indices of pixels with higher value than signum * sigma, where signum is by default 5.
     
     Arguments
@@ -275,17 +275,19 @@ def makeMask(varim, x, y, display=False):
 
 # Pixel distribution fitting
 
-def fitPx(varim, binnum=300, hrange=(0,50000), xlim=(-1000,30000)):
+def fitPx(varim, signum=5., binnum=300, hrange=(0,50000), xlim=(-1000,30000)):
     """ Fits a Gaussian over normally-distributed pixels and uses findClipPx to identify unwanted pixels.
     
     Arguments
     -----------
     varim: 2D numpy array
-    binnum: float
+    signum: float, optional
+        default = 5.
+    binnum: float, optional
         Number of histogram bins
-    hrange: tuple
+    hrange: tuple, optional
         range parameter of histogram
-    xlim: tuple
+    xlim: tuple, optional
         plot x-axis limits
     
     Returns
@@ -325,7 +327,7 @@ def fitPx(varim, binnum=300, hrange=(0,50000), xlim=(-1000,30000)):
     plt.plot(fitX, gaussian(fitX, *popt), label='Gaussian Fit')
     plt.axvline(mu_fit, ls=':', c='k', label='$x_0$ = '+str('%s' % float('%.2f' % mu_fit)))
     
-    pxclip, pxclipval = findClipPx(varim, mu_fit, sigma_fit) # Finds pixel value at which to cutoff and its index
+    pxclip, pxclipval = findClipPx(varim, mu_fit, sigma_fit, signum) # Finds pixel value at which to cutoff and its index
     
     plt.hist(varim[pxclip], bins=binnum, range=hrange, histtype='step', 
              edgecolor='r', hatch='//', label='Masked Px')
