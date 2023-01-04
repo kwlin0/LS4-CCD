@@ -20,7 +20,7 @@ A pair of flats at increasing exposure times can be used to produce a signal var
 
 ### X-ray
 
-Using the x-ray approach involves manually placing a radioactive 55Fe source directly in front of the CCD. The idea is to extract the sources of the x-ray hits on the active surface and plot the flux distribution of these hits. The energies of the electron capture decays are well-known. The ratio of the peaks at 5.9 keV and 6.5 keV are used to find the gain.
+Using the x-ray approach involves manually placing a radioactive 55Fe source directly in front of the CCD. The idea is to extract the sources of the x-ray hits on the active surface and plot the flux distribution of these hits. The energies of the electron capture decays are well-known. The ratio of the peaks at 5.9 keV and 6.5 keV are used to find the gain. A series of darks (we have been using 30) are taken at 60 second exposures. X-rays also may reveal evidence of charge transfer inefficiency, the telltale signs of which are pixel streaking on the x-ray hits.
 
 ## Measuring quantum efficiency
 
