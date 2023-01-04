@@ -15,6 +15,9 @@ import numpy as np
 from astropy.io import fits
 from astropy.stats import sigma_clip
 import matplotlib.pyplot as plt
+from matplotlib.font_manager import FontProperties
+import matplotlib.font_manager as font_manager
+import pandas as pd
 from scipy.optimize import curve_fit
 from scipy import stats
 from SkipperImage import *
@@ -22,16 +25,19 @@ import sep
 from tqdm.notebook import tqdm
 
 
-def find_data(directory, filt):
+def find_data(directory, filt, exptime=None):
     
     """ Get a list of a list of files of a specified filter.
     
     directory : either 'qe', 'ptc', or 'darks'
-    file : int
+    filt : int
+    exptime : float, optional
     """
     directory = glob.glob(directory + '/*/')
     
     output_dir_list = []
+    
+    output_dir_list_exptime = []
     
     for folder in directory:
         filelist = glob.glob(folder + '*.fz') #+ glob(folder + '*.fits') 
@@ -43,12 +49,33 @@ def find_data(directory, filt):
             
             if filelist_filt == filt:
                 output_dir_list.append(filelist)
+    
+    # Search output_dir_list for desired exposure time
+    if exptime is not None:
+        for output_dir_filelist in output_dir_list:    # we need to comb through each file to verify the exptime in the FITS header
+            for file in output_dir_filelist:
+                #print(file)
+                filelist_exptime = fits.getheader(file)['EXPTIME']
+            
+                if filelist_exptime == exptime:
+                    output_dir_list_exptime.append(file)
+        
+        
+        if len(output_dir_list_exptime) > 0:
+            print(str(len(output_dir_list_exptime)) +' files found.')
+        
+        else:
+            return f'Filter {filt} and exposure time {exptime} not found.'
+        
+        # Finish search and exits
+        return output_dir_list_exptime
 
+    # Only runs this if exptime is not specified
     if len(output_dir_list) > 0:
-        print(str(len(output_dir_list)) +' directories found')
+        print(str(len(output_dir_list)) +' directories found.')
             
     else:
-        return 'Filter ' + str(filt) +' not found'
+        return 'Filter ' + str(filt) +' not found.'
         
     
     return output_dir_list
@@ -235,6 +262,8 @@ def makeMedian(filelist, destination):
 
 def makeMedian_fz(filelist, destination_directory, ccd):
     """ Returns 2 median images for each of the two FITS extensions
+    
+    destination_directory -- including filename (_median_e2.fits and _median_e3.fits will be appended)
     """
     
     print('Unpacking files:')
