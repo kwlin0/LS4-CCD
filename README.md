@@ -1,6 +1,6 @@
 # LS4 CCD Testing Analysis Tools
 
-An under-construction pipeline for DECam CCD testing for the LS4 Survey.
+An under-construction pipeline for DECam CCD testing for the LS4 Survey. The controller used for CCD testing was the 4-channel LTA developed by Fermilab. The controller to be used at the observatory will be the STA Archon controller.
 
 ## Dependencies
 
@@ -9,6 +9,10 @@ An under-construction pipeline for DECam CCD testing for the LS4 Survey.
 * Astropy (4.2.1)
 * SEP (1.2.0)
 * Optional: pylatex (1.4.1)
+
+## Controller
+
+Sensors were tested and characterized with the 4-channel LTA. With testing completed, LS4 will now exclusively use the Archon controller. The Archon controller communicates via a raw port and can send data at the full 1 GB network rate. It can also be configured and used with a GUI interface.
 
 ## Measuring gain
 
