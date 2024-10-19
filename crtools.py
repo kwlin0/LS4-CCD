@@ -60,7 +60,7 @@ def get_subtracted(FITS_file):
     gcoverscan_subtracted_hdulist.writeto(gcoutname, overwrite = True)
     return outname, gcoutname
 
-def get_masks(FITS_file):
+def get_masks_sigmaclip(FITS_file):
     """
     FITS_file should be a FITS image of a DARK DECam exposure
     """
@@ -86,6 +86,66 @@ def get_masks(FITS_file):
     outname_gc = 'gc_' + FITS_file.split('/')[-1]
     new_mask.writeto(outname, overwrite = True)
     new_gc.writeto(outname_gc, overwrite = True)
+    return outname
+    
+def get_masks(FITS_file):
+    """
+    Using convolution on a blur kernel
+    FITS_file should be a FITS image of a DARK overscan subtracted exposure
+    """
+    cr_thresh = 100
+    y0 = 51
+    y1 = 4000
+    x0 = 57
+    x1 = 1080
+    x2 = 1081
+    x3 = 2000
+    hdulist = fits.open(FITS_file)
+    new_mask = fits.HDUList(fits.PrimaryHDU(header=hdulist[0].header))
+
+    dataA_arr = np.zeros((70 - 1, y1-y0, x1-x0))
+    maskA_arr = np.zeros((70 - 1, 4095, x1))
+    dataB_arr = np.zeros((70 - 1, y1-y0, x3-x2))
+    maskB_arr = np.zeros((70 - 1, 4095, 2046-x1))
+    
+    k = np.ones((3, 3))
+    for hdun, hdu in tqdm(enumerate(hdulist[1:63]), colour='green'):
+        gainA = hdu.header['GAINA']
+        gainB = hdu.header['GAINB']
+        shape = hdu.data.shape
+        dataB_arr[hdun] = hdu.data[y0:y1, x2:x3]  #[51:4146, 1081:2104] * gainB
+        dataA_arr[hdun] = hdu.data[y0:y1, x0:x1] # * gainA
+
+
+        maskA = dataA_arr[hdun] > cr_thresh
+        dataA_sigmaclip_std = stats.sigma_clip(dataA_arr[hdun], sigma_lower=3, sigma_upper=3)
+        dataA_good = dataA_arr[hdun] > 3*dataA_sigmaclip_std # it seems as if the 3 * sigmaclipped standard deviation does better than the median dark
+        
+        prev = 0
+        while(np.sum(maskA) - prev) > 0: # loops over number of pixels identified as part of CRs until this number doesn't increase anymore
+            # np.sum(m) is the number of pixels identified as part of CRs
+            prev = np.sum(maskA)
+            maskA = ndimage.convolve(maskA, k, mode='wrap') & dataA_good
+        maskA_arr[hdun] = np.pad(maskA, ((y0, shape[0]-y1), (x0, 0)), 'constant', constant_values=(0, 0))
+        
+
+        maskB = dataB_arr[hdun] > cr_thresh
+        dataB_sigmaclip_std = stats.sigma_clip(dataB_arr[hdun], sigma_lower=3, sigma_upper=3)
+        dataB_good = dataB_arr[hdun] > 3*dataB_sigmaclip_std # it seems as if the 3 * sigmaclipped standard deviation does better than the median dark
+        
+        prev = 0
+        while(np.sum(maskB) - prev) > 0: # loops over number of pixels identified as part of CRs until this number doesn't increase anymore
+            # np.sum(m) is the number of pixels identified as part of CRs
+            prev = np.sum(maskB)
+            maskB = ndimage.convolve(maskB, k, mode='wrap') & dataB_good
+        maskB_arr[hdun] = np.pad(maskB, ((y0, shape[0]-y1), (x2-x1, shape[1]-x3)), 'constant', constant_values=(0, 0))
+        
+        mask_arr = np.concatenate((maskA_arr[hdun], maskB_arr[hdun]), axis=1)    # stitch the two amps back together
+        new_mask.append(fits.CompImageHDU(mask_arr, hdu.header))   # make image data compressed
+    
+    
+    outname = 'crm_' + FITS_file.split('/')[-1]
+    new_mask.writeto(outname, overwrite = True)
     return outname
 
 def get_trimmed(FITS_file):
@@ -237,7 +297,7 @@ def add_noise(data, level, sigma=0):
 def main():
     parser = argparse.ArgumentParser(description="Generate CR mask for a raw DECam image.")
     parser.add_argument("path", nargs='+', help="FITS file input")
-    parser.add_argument('-m', '--mask', action='store_true', help='Apply mask on DECam dark FITS image')
+    parser.add_argument('-m', '--mask', action='store_true', help='Apply mask on overscan subtracted DECam dark FITS image')
     parser.add_argument('-s', '--subtraction', action='store_true', help='Apply overscan subtraction on DECam FITS image')
     args = parser.parse_args()
 
