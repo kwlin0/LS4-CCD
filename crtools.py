@@ -3,6 +3,7 @@
 import argparse
 from astropy.io import fits
 from astropy import stats
+from scipy import ndimage
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -68,9 +69,9 @@ def get_masks_sigmaclip(FITS_file):
     maskA_arr = np.empty((70 - 1, 4095, 1023))
     dataB_arr = np.empty((70 - 1, 4095, 1023))
     maskB_arr = np.empty((70 - 1, 4095, 1023))
-    new_mask = fits.HDUList()
-    new_gc = fits.HDUList() # gain-corrected FITS file
     hdulist = fits.open(FITS_file)
+    new_mask = fits.HDUList(fits.PrimaryHDU(header=hdulist[0].header))
+    new_gc = fits.HDUList(fits.PrimaryHDU(header=hdulist[0].header)) # gain-corrected FITS file
     for hdun, hdu in tqdm(enumerate(hdulist[1:63]), colour='green'):
         gainA = hdu.header['GAINA']
         gainB = hdu.header['GAINB']
@@ -87,7 +88,7 @@ def get_masks_sigmaclip(FITS_file):
     new_mask.writeto(outname, overwrite = True)
     new_gc.writeto(outname_gc, overwrite = True)
     return outname
-    
+
 def get_masks(FITS_file):
     """
     Using convolution on a blur kernel
@@ -102,17 +103,17 @@ def get_masks(FITS_file):
     x3 = 2000
     hdulist = fits.open(FITS_file)
     new_mask = fits.HDUList(fits.PrimaryHDU(header=hdulist[0].header))
-
+    shape = hdulist[1].data.shape
+    
     dataA_arr = np.zeros((70 - 1, y1-y0, x1-x0))
-    maskA_arr = np.zeros((70 - 1, 4095, x1))
+    maskA_arr = np.zeros((70 - 1, shape[0], x1))
     dataB_arr = np.zeros((70 - 1, y1-y0, x3-x2))
-    maskB_arr = np.zeros((70 - 1, 4095, 2046-x1))
+    maskB_arr = np.zeros((70 - 1, shape[0], shape[1]-x1))
     
     k = np.ones((3, 3))
     for hdun, hdu in tqdm(enumerate(hdulist[1:63]), colour='green'):
         gainA = hdu.header['GAINA']
         gainB = hdu.header['GAINB']
-        shape = hdu.data.shape
         dataB_arr[hdun] = hdu.data[y0:y1, x2:x3]  #[51:4146, 1081:2104] * gainB
         dataA_arr[hdun] = hdu.data[y0:y1, x0:x1] # * gainA
 
@@ -122,11 +123,12 @@ def get_masks(FITS_file):
         dataA_good = dataA_arr[hdun] > 3*dataA_sigmaclip_std # it seems as if the 3 * sigmaclipped standard deviation does better than the median dark
         
         prev = 0
-        while(np.sum(maskA) - prev) > 0: # loops over number of pixels identified as part of CRs until this number doesn't increase anymore
+        while(np.sum(maskA) - prev) > 1: # loops over number of pixels identified as part of CRs until this number doesn't increase anymore
             # np.sum(m) is the number of pixels identified as part of CRs
             prev = np.sum(maskA)
             maskA = ndimage.convolve(maskA, k, mode='wrap') & dataA_good
-        maskA_arr[hdun] = np.pad(maskA, ((y0, shape[0]-y1), (x0, 0)), 'constant', constant_values=(0, 0))
+        maskA_padded = np.pad(maskA, ((y0, shape[0]-y1), (x0, 0)), 'constant', constant_values=(0, 0))
+        maskA_arr[hdun] = np.ma.make_mask(maskA_padded, shrink=False)
         
 
         maskB = dataB_arr[hdun] > cr_thresh
@@ -134,14 +136,15 @@ def get_masks(FITS_file):
         dataB_good = dataB_arr[hdun] > 3*dataB_sigmaclip_std # it seems as if the 3 * sigmaclipped standard deviation does better than the median dark
         
         prev = 0
-        while(np.sum(maskB) - prev) > 0: # loops over number of pixels identified as part of CRs until this number doesn't increase anymore
+        while(np.sum(maskB) - prev) > 1: # loops over number of pixels identified as part of CRs until this number doesn't increase anymore
             # np.sum(m) is the number of pixels identified as part of CRs
             prev = np.sum(maskB)
             maskB = ndimage.convolve(maskB, k, mode='wrap') & dataB_good
-        maskB_arr[hdun] = np.pad(maskB, ((y0, shape[0]-y1), (x2-x1, shape[1]-x3)), 'constant', constant_values=(0, 0))
+        maskB_padded = np.pad(maskB, ((y0, shape[0]-y1), (x2-x1, shape[1]-x3)), 'constant', constant_values=(0, 0)) 
+        maskB_arr[hdun] = np.ma.make_mask(maskB_padded, shrink=False)
         
         mask_arr = np.concatenate((maskA_arr[hdun], maskB_arr[hdun]), axis=1)    # stitch the two amps back together
-        new_mask.append(fits.CompImageHDU(mask_arr, hdu.header))   # make image data compressed
+        new_mask.append(fits.CompImageHDU(mask_arr, hdu.header))   # compress image data
     
     
     outname = 'crm_' + FITS_file.split('/')[-1]
@@ -232,6 +235,18 @@ def get_rand_chucks(data, npix=500, nchucks=10):
         yrand[i] = y
     return data_chunked, xrand, yrand
 
+def get_mask_chucks(mask_data, data_chunked, xc, yc):
+    """
+    Get corresponding mask chunks corresponding to data chucks generated from get_rand_chucks
+    mask_data : ndarray
+    data_chunked : ndarray
+    xc, yc : generated indices from get_random_chucks
+    """
+    crmask_chunked = np.zeros((len(xc), len(data_chunked[0]), len(data_chunked[0])))
+    for i in range(len(xc)):
+        crmask_chunked[i] = mask_data[int(yc[i]):int(yc[i]) + len(data_chunked[0]), int(xc[i]):int(xc[i]) + len(data_chunked[0])]
+    return crmask_chunked
+
 def gaussian_noise(image, amount):
     """
     Generate simulated read noise.
@@ -293,6 +308,39 @@ def add_noise(data, level, sigma=0):
     synthetic_image = np.zeros([data.shape[0], data.shape[1]])
     new_image = data + sky_background(synthetic_image, level) + gaussian_noise(synthetic_image, sigma)
     return new_image
+
+def get_training_data(coadd_data, osubdark_data, crmask_data, npix = 1000, nchucks = 10, simulate_output = True):
+    """
+    Puts steps together into one function. Input data are all numpy ndarrays.
+    All input arrays will be shaped to the size of the coadd_data hardcoded as [125:2115, 150:4190]
+    
+    Steps are:
+    1. Add noise to coadd (CR-cleaned) data and slice to eliminate funky edges.
+    2. Shape overscan-corrected DECam dark image to the same shape.
+    3. Shape the CR mask to the same shape. 
+    4. Add the shaped coadd data and shaped overscan-corrected darks to generate the simulated image.
+    5. Generate random square chucks from the simulated image.
+    6. Generate the corresponding square chucks in the CR masks.
+    
+    """
+    coadd_data_noised = add_noise(coadd_data, 320, 0)[125:2115, 150:4190] # cuts out edges of coadd
+    shape             = coadd_data_noised.shape
+    osubdark_shaped   = osubdark_data[50:50+shape[0], :shape[1]] # get the data in the shape that matches the simulated image
+    crmask_shaped     = crmask_data[50:50+shape[0], :shape[1]] # get the data in the shape that matches the simulated image
+    simulated_image   = coadd_data_noised + osubdark_shaped
+    
+    if simulate_output:
+        i = 0
+        while os.path.exists("simulated_%s.fits" % i):
+            i += 1
+        fits.writeto("simulated_%s.fits" % i, simulated_image, overwrite=True)
+        print("simulated_%s.fits" % i)
+    
+    # Last step: break up into chucks
+    chucks, xc, yc = get_rand_chucks(simulated_image, npix, nchucks)
+    crmask_chucks = get_mask_chucks(crmask_shaped, chucks, xc, yc)
+    
+    return chucks, crmask_chucks
 
 def main():
     parser = argparse.ArgumentParser(description="Generate CR mask for a raw DECam image.")
