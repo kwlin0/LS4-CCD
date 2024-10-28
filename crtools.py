@@ -144,7 +144,7 @@ def get_masks(FITS_file):
         maskB_arr[hdun] = np.ma.make_mask(maskB_padded, shrink=False)
         
         mask_arr = np.concatenate((maskA_arr[hdun], maskB_arr[hdun]), axis=1)    # stitch the two amps back together
-        new_mask.append(fits.CompImageHDU(mask_arr, hdu.header))   # compress image data
+        new_mask.append(fits.CompImageHDU(mask_arr, hdu.header, compression_type='PLIO_1'))   # compress image data
     
     
     outname = 'crm_' + FITS_file.split('/')[-1]
@@ -333,7 +333,11 @@ def get_training_data(coadd_data, osubdark_data, crmask_data, npix = 1000, nchuc
         i = 0
         while os.path.exists("simulated_%s.fits" % i):
             i += 1
-        fits.writeto("simulated_%s.fits" % i, simulated_image, overwrite=True)
+        hd0 = fits.PrimaryHDU()
+        hd1 = fits.ImageHDU(simulated_image, name="IMAGE")
+        hd2 = fits.ImageHDU(np.ma.make_mask(crmask_shaped) * 255, name="MASK")
+        hdulist = fits.HDUList([hd0, hd1, hd2])
+        hdulist.writeto("simulated_%s.fits" % i, overwrite=True)
         print("simulated_%s.fits" % i)
     
     # Last step: break up into chucks
