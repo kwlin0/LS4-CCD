@@ -325,9 +325,14 @@ def get_training_data(coadd_data, osubdark_data, crmask_data, npix = 1000, nchuc
     """
     coadd_data_noised = add_noise(coadd_data, 320, 0)[125:2115, 150:4190] # cuts out edges of coadd
     shape             = coadd_data_noised.shape
-    osubdark_shaped   = osubdark_data[50:50+shape[0], :shape[1]] # get the data in the shape that matches the simulated image
-    crmask_shaped     = crmask_data[50:50+shape[0], :shape[1]] # get the data in the shape that matches the simulated image
+    osubdark_shaped   = osubdark_data[:shape[0], :shape[1]] # get the data in the shape that matches the simulated image
+    crmask_shaped     = crmask_data[:shape[0], :shape[1]] # get the data in the shape that matches the simulated image
     simulated_image   = coadd_data_noised + osubdark_shaped
+    
+    # This is to make sure the chucks that are cut out don't include the edges
+    # which have been padded at the edges for the CR masks generated
+    simulated_image   = simulated_image[50:-50, 50:-50]
+    crmask_shaped     = crmask_shaped[50:-50, 50:-50]
     
     if simulate_output:
         i = 0
