@@ -10,9 +10,6 @@ import pandas as pd
 from tqdm import tqdm
 import os
 
-#natroot = 'https://astroarchive.noirlab.edu'
-#adsurl = f'{natroot}/api/adv_search'
-
 def get_subtracted(FITS_file):
     hdulist = fits.open(FITS_file)
     overscan_subtracted_hdulist = fits.HDUList(fits.PrimaryHDU(header=hdulist[0].header)) # gain-UNcorrected FITS file
@@ -309,10 +306,11 @@ def add_noise(data, level, sigma=0):
     new_image = data + sky_background(synthetic_image, level) + gaussian_noise(synthetic_image, sigma)
     return new_image
 
-def get_training_data(coadd_data, osubdark_data, crmask_data, npix = 1000, nchucks = 10, simulate_output = True):
+def get_training_data(coadd_data, osubdark_data, crmask_data, npix = 1000, nchucks = 10, simulate_output = True, bpm = None):
     """
     Puts steps together into one function. Input data are all numpy ndarrays.
     All input arrays will be shaped to the size of the coadd_data hardcoded as [125:2115, 150:4190]
+    Warning: memory intensive task when looped multiple times!
     
     Steps are:
     1. Add noise to coadd (CR-cleaned) data and slice to eliminate funky edges.
@@ -323,7 +321,11 @@ def get_training_data(coadd_data, osubdark_data, crmask_data, npix = 1000, nchuc
     6. Generate the corresponding square chucks in the CR masks.
     
     """
-    coadd_data_noised = add_noise(coadd_data, 320, 0)[125:2115, 150:4190] # cuts out edges of coadd
+    # Draw from a normal distribution the skylevel to add to the coadd_data
+    skylevel = np.random.normal(350, 50, 1)
+    
+    coadd_data        = coadd_data[125:2115, 150:4190]
+    coadd_data_noised = add_noise(coadd_data, skylevel, 0) # cuts out edges of coadd
     shape             = coadd_data_noised.shape
     osubdark_shaped   = osubdark_data[:shape[0], :shape[1]] # get the data in the shape that matches the simulated image
     crmask_shaped     = crmask_data[:shape[0], :shape[1]] # get the data in the shape that matches the simulated image
@@ -333,23 +335,47 @@ def get_training_data(coadd_data, osubdark_data, crmask_data, npix = 1000, nchuc
     # which have been padded at the edges for the CR masks generated
     simulated_image   = simulated_image[50:-50, 50:-50]
     crmask_shaped     = crmask_shaped[50:-50, 50:-50]
-    
-    if simulate_output:
-        i = 0
-        while os.path.exists("simulated_%s.fits" % i):
-            i += 1
-        hd0 = fits.PrimaryHDU()
-        hd1 = fits.ImageHDU(simulated_image, name="IMAGE")
-        hd2 = fits.ImageHDU(np.ma.make_mask(crmask_shaped) * 255, name="MASK")
-        hdulist = fits.HDUList([hd0, hd1, hd2])
-        hdulist.writeto("simulated_%s.fits" % i, overwrite=True)
-        print("simulated_%s.fits" % i)
+    coadd_data        = coadd_data[50:-50, 50:-50]
+    osubdark_shaped   = osubdark_shaped[50:-50, 50:-50]
     
     # Last step: break up into chucks
     chucks, xc, yc = get_rand_chucks(simulated_image, npix, nchucks)
     crmask_chucks = get_mask_chucks(crmask_shaped, chucks, xc, yc)
+    coadd_data_chucks = get_mask_chucks(coadd_data, chucks, xc, yc)
+    osubdark_data_chucks = get_mask_chucks(osubdark_shaped, chucks, xc, yc)
     
-    return chucks, crmask_chucks
+    if bpm is not None:
+        print('Bad pixel mask was given')
+        bpm_coadd_data    = bpm[125:2115, 150:4190]
+        bpm_coadd_data    = bpm_coadd_data[50:-50, 50:-50]
+        bpm_chucks        = get_mask_chucks(bpm_coadd_data, chucks, xc, yc)
+        
+        if simulate_output:
+            print("Including BPM mask in simulated output")
+            i = 0
+            while os.path.exists('simulated_%03d.fits' % i):
+                i += 1
+            hd0 = fits.PrimaryHDU()
+            hd1 = fits.ImageHDU(simulated_image, name="IMAGE")
+            hd2 = fits.ImageHDU(np.ma.make_mask(crmask_shaped) * 255, name="MASK")
+            hd3 = fits.ImageHDU(bpm_coadd_data, name="BPM")
+            hdulist = fits.HDUList([hd0, hd1, hd2, hd3])
+            hdulist.writeto("simulated_%03d.fits" % i, overwrite=True)
+            print('simulated_%03d.fits' % i)
+        
+        return chucks, crmask_chucks, coadd_data_chucks, osubdark_data_chucks, bpm_chucks
+    else:
+        if simulate_output:
+            i = 0
+            while os.path.exists("simulated_%03d.fits" % i):
+                i += 1
+            hd0 = fits.PrimaryHDU()
+            hd1 = fits.ImageHDU(simulated_image, name="IMAGE")
+            hd2 = fits.ImageHDU(np.ma.make_mask(crmask_shaped) * 255, name="MASK")
+            hdulist = fits.HDUList([hd0, hd1, hd2])
+            hdulist.writeto("simulated_%03d.fits" % i, overwrite=True)
+            print("simulated_%03d.fits" % i)
+        return chucks, crmask_chucks, coadd_data_chucks
 
 def main():
     parser = argparse.ArgumentParser(description="Generate CR mask for a raw DECam image.")
