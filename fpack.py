@@ -33,24 +33,28 @@ def combine_files(single_exposure_filenames, compress=True):
         hdulist.append(imageHDU)
     allHDU = fits.HDUList(hdulist)
     if compress == False:
-        allHDU.writeto(single_exposure_filenames[0].split('/')[-2]+".fits", overwrite=True)
+        outname = os.path.dirname(single_exposure_filenames[0]) + ".fits"
+        allHDU.writeto(outname, overwrite=True)
+        print('Wrote', outname)
     else:
-        allHDU.writeto(single_exposure_filenames[0].split('/')[-2]+".fits.fz", overwrite=True)
+        outname = os.path.dirname(single_exposure_filenames[0]) + ".fits.fz"
+        allHDU.writeto(outname, overwrite=True)
+        print('Wrote', outname)
     
     
 def main():
-    parser = argparse.ArgumentParser(description="Combine a single exposure focal plane image FITS files into a single fpacked file. Output files in the directory where this script is run.")
+    parser = argparse.ArgumentParser(description="Combine a single exposure focal plane image FITS files into a single fpacked file. Output files in the parent directory of raw image files.")
     parser.add_argument("path", nargs='+', help="Raw file input: (1) to compress single exposure, use path/to/exp_00000/*.fits, (2) to compress a number of exposures, use path/to/exp*")
     args = parser.parse_args()
     
     inputdat = sorted(args.path)
     
     if inputdat[0].lower().endswith(('.fits', '.fit', '.FITS')):
-        print('FITS files given - compressing as single exposure')
+        print('FITS files given\ncompressing as single exposure')
         combine_files(inputdat)
     
     else:
-        print('Compressing all exposures')
+        print('Compressing all exposures...')
         for file in inputdat:
             # Verify that given path is an exposure directory
             if os.path.isdir(file):
