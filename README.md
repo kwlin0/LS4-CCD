@@ -2,13 +2,13 @@
 
 An under-construction pipeline for DECam CCD testing for the LS4 Survey. The controller used for CCD testing was the 4-channel LTA developed by Fermilab. The controller to be used at the observatory will be the STA Archon controller.
 
-## Dependencies
+## Requirements
 
-* NumPy (1.20.0)
-* SciPy.stats (1.6.2)
-* Astropy (4.2.1)
-* SEP (1.2.0)
-* Optional: pylatex (1.4.1)
+* Numpy (>=1.20.0)
+* Scipy (>=1.6.2)
+* Astropy (>=4.2.1)
+* sep (>=1.2.0)
+* Optional: pylatex (>=1.4.1)
 
 ## CCD layout
 
@@ -45,3 +45,7 @@ Biases are used for identifying defects on the active surface. A large number of
 ### Charge transfer efficiency
 
 Both X-rays and flat field data can be used to calculate the charge transfer efficiency (CTE) of the detector. For X-rays, the classic X-ray horizontal stacking plot can be used to determine if there is a slope in the X-ray event line between the leading and trailing edges of the CCD, which is indicative of charge transfer inefficiency. Using flat field data, the extended-pixel edge response technique can be used.
+
+## File compression
+
+The raw image output from the controllers for a given exposure is a single FITS image for each readout amplifier, yielding a total of 64 independent FITS image files for the entire focal plane of 32 CCDs in dual amplifier readout mode. Before files are transferred, the FITS files for each exposure should be combined and compressed into a single fpacked FITS file with 64 image HDU extensions. This can be done with the `fpack.py` script which uses the Rice compression algorithm by default.
