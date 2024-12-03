@@ -19,8 +19,8 @@ import argparse
 from astropy.io import fits
 from glob import glob
 
-def combine_files(single_exposure_filenames, compress=True, header=None):
-    primaryHDU = fits.PrimaryHDU(header=header)
+def combine_files(single_exposure_filenames, compress=True, primaryheader=None):
+    primaryHDU = fits.PrimaryHDU(header=primaryheader)
     hdulist = [primaryHDU]
     for filenum in range(len(single_exposure_filenames)):
         data       = fits.open(single_exposure_filenames[filenum])[0].data
