@@ -19,17 +19,16 @@ import argparse
 from astropy.io import fits
 from glob import glob
 
-def combine_files(single_exposure_filenames, compress=True):
-    primaryHDU = fits.PrimaryHDU()
+def combine_files(single_exposure_filenames, compress=True, header=None):
+    primaryHDU = fits.PrimaryHDU(header=header)
     hdulist = [primaryHDU]
     for filenum in range(len(single_exposure_filenames)):
         data       = fits.open(single_exposure_filenames[filenum])[0].data
         header     = fits.open(single_exposure_filenames[filenum])[0].header
-        imageHDU   = fits.CompImageHDU(data, header=header)
         if compress == False:
             imageHDU   = fits.ImageHDU(data, header=header)
         else:
-            imageHDU   = fits.CompImageHDU(data, header=header)
+            imageHDU   = fits.CompImageHDU(data, header=header, compression_type='RICE_1')
         hdulist.append(imageHDU)
     allHDU = fits.HDUList(hdulist)
     if compress == False:
