@@ -4,7 +4,7 @@
 # -*- coding: utf-8 -*-
 #
 # @Author: Kenneth Lin
-# @Date: 2024-12-02
+# @Date: 2024-12-03
 # @Filename: fpack.py
 #
 # use astropy.io utility to
@@ -19,8 +19,30 @@ import argparse
 from astropy.io import fits
 from glob import glob
 
+# sample PrimaryHDU header
+hdu_0 = {'OBSMODE' : ['survey', 'Observing mode'],
+         'FOCUS'   : [28.10000, 'Telescope focus position'],
+         'INSTRUME': ['LS4Cam', 'La Silla Schmidt Southern Survey Camera'],
+         'OBSERVAT': ['ESO La Silla', 'ESO La Silla Observatory'],
+         'TELESCOP': ['ESO 1.0-m Schmidt'],
+         'LATITUDE': [-29.25444, 'Telescope Latitude  (degrees north)'],
+         'LONGITUD': [70.74167, 'Telescope Longitude (degrees west)'],
+         'ELEVATIO': [2347, 'Telescope Elevation (meters)'],
+         'CCDMODE' : ['dual', 'Dual or single amplifier readout mode'] }
+
+def modhead(hdu, header_dict):
+    """
+    Modify FITS header given a FITS HDU and header data structured as a dictionary `header_dict`
+    """
+    for k,v in header_dict.items():
+        hdu.header[k] = v[0]
+        if len(v) == 2:
+            hdu.header.comments[k] = v[1]
+
 def combine_files(single_exposure_filenames, compress=True, primaryheader=None):
-    primaryHDU = fits.PrimaryHDU(header=primaryheader)
+    primaryHDU = fits.PrimaryHDU()
+    if primaryheader is not None:
+        modhead(primaryHDU, primaryheader)
     hdulist = [primaryHDU]
     for filenum in range(len(single_exposure_filenames)):
         data       = fits.open(single_exposure_filenames[filenum])[0].data
@@ -34,12 +56,13 @@ def combine_files(single_exposure_filenames, compress=True, primaryheader=None):
     if compress == False:
         outname = os.path.dirname(single_exposure_filenames[0]) + ".fits"
         allHDU.writeto(outname, overwrite=True)
-        print('Wrote', outname)
+        size = os.stat(outname).st_size
+        print("Wrote", outname, f"@ {round(size/(pow(1024,2)), 2)} MB")
     else:
         outname = os.path.dirname(single_exposure_filenames[0]) + ".fits.fz"
         allHDU.writeto(outname, overwrite=True)
-        print('Wrote', outname)
-    
+        size = os.stat(outname).st_size
+        print("Wrote", outname, f"@ {round(size/(pow(1024,2)), 2)} MB")
     
 def main():
     parser = argparse.ArgumentParser(description="Combine a single exposure focal plane image FITS files into a single fpacked file. Output files in the parent directory of raw image files.")
@@ -59,7 +82,7 @@ def main():
             if os.path.isdir(file):
                 print(file)
                 single_exposure_filenames = sorted(glob(file+'/test*.fits'))
-                combine_files(single_exposure_filenames)
+                combine_files(single_exposure_filenames, primaryheader=hdu_0)
             # If not a directory, skip
             else:
                 print('Skipping', file)
