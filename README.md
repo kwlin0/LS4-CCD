@@ -22,6 +22,8 @@ During CCD testing, the best performing CCDs were ranked and then installed in t
 
 Sensors were tested and characterized with the 4-channel LTA. With testing completed, LS4 will now exclusively use the Archon controller. The Archon controller communicates via a raw port and can send data at the full 1 GB network rate. It can also be configured and used with a GUI interface. We use four Archon controllers in a leader-follower configuration, such that all the clocking is synchronized. Each controller reads the video outputs of eight CCDs. The software for running the controllers synchronously is located in a separate repository (https://github.com/dlrabinowitz/ls4_control) and is built on top of the sdss-archon software.
 
+The default operating mode of the CCDs is with dual/split readout, where the two amplifiers of the CCD are each used to read out charge on half of the active area. Because of connection problems discovered during laboratory testing of the camera on four halves of four CCD devices, a second mode was introduced which allows the CCDs to be read by only one amplifier which recovers all active area pixels (with a penalty in doubling readout time). This mode is enabled by loading a timing code that clocks charge in the serial register in a single direction for each CCD.
+
 ### Measuring gain
 
 There are two approaches used in the testing to obtain a gain measurement. The primary method was using the photon transfer transfer curve (PTCs) which relies on a reasonably flat illumination of the detector. The secondary method using X-rays was only used for a select number of detectors tested.
@@ -48,4 +50,4 @@ Both X-rays and flat field data can be used to calculate the charge transfer eff
 
 ## File compression
 
-The raw image output from the controllers for a given exposure is a single FITS image for each readout amplifier, yielding a total of 64 independent FITS image files for the entire focal plane of 32 CCDs in dual amplifier readout mode. Before files are transferred, the FITS files for each exposure should be combined and compressed into a single fpacked FITS file with 64 image HDU extensions. This can be done with the `fpack.py` script which uses the Rice compression algorithm by default.
+The raw image output from the controllers for a given exposure is a single FITS image for each readout amplifier, yielding a total of 64 independent FITS image files for the entire focal plane of 32 CCDs in dual amplifier readout mode. Before files are transferred, the FITS files for each exposure should be combined and compressed into a single fpacked FITS file with 64 image HDU extensions. This can be done with the `fpack.py` script which uses the Rice compression algorithm by default during testing, but will be using a version of JPEG-2000 compression in production. Primary HDU header data, such as information related to system-level or telescope status from the telescope control system, will be inserted at this stage.
